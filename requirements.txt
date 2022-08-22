@@ -5,3 +5,4 @@ dnspython
 python-dotenv
 py-vapid
 pywebpush
+markdown

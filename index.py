@@ -10,6 +10,9 @@ from pywebpush import webpush, WebPushException
 import json
 from uuid import uuid4
 from concurrent.futures import ThreadPoolExecutor
+import hashlib
+from functools import wraps
+from lib.markdown_image_extractor import getMarkdownImage
 
 app = Flask(__name__)
 app.url_map.strict_slashes = False
@@ -18,6 +21,7 @@ CORS(app)
 dotenv.load_dotenv()
 MONGODB_SECRET = environ.get('MONGODB_SECRET')
 WEBPUSH_PRIVATE_KEY = environ.get('WEBPUSH_PRIVATE_KEY')
+GENERIC_HOOK_KEY_HASH = environ.get('GENERIC_HOOK_KEY_HASH')
 
 client = pymongo.MongoClient(MONGODB_SECRET)
 db = client.webpush
@@ -37,7 +41,12 @@ def success_json(message=None, data=None):
 def error_json(message=None, data=None):
 	return json_response(400, message, data)
 
-def makeNotification(title, body, options = {}):
+def sha256(s):
+	hash = hashlib.sha256()
+	hash.update(s.encode('utf-8'))
+	return hash.hexdigest()
+
+def makeNotification(title: str, body: str, options = {}):
 	notificationId = str(uuid4())
 	createdTime = datetime.utcnow()
 	notification = {
@@ -76,16 +85,41 @@ def sendNotification(notification):
 		attempted.append(subscriber['_id'])
 	notificationsCollection.update_one({"_id": notification['_id']}, {"$push": {"attempted": {"$each": attempted}}})
 
+def require_api_key(f):
+	@wraps(f)
+	def wrapper(*args, **kwargs):
+		if 'api-key' not in request.headers:
+			return error_json('No API key provided')
+		apiKey = request.headers.get('api-key')
+		if (sha256(apiKey) != GENERIC_HOOK_KEY_HASH):
+			return error_json('Invalid API key')
+		return f(*args, **kwargs)
+	return wrapper
+
 @app.route('/')
 def index():
 	return 'hi'
 
 @app.route('/hooks/notification/generic', methods=['POST'])
+@require_api_key
 def genericNotification():
 	data = request.get_json()
 	notification = makeNotification(data['title'], data['body'])
 	sendNotification(notification)
 	return success_json()
 
+@app.route('/hooks/notification/contentful', methods=['POST'])
+@require_api_key
+def contentfulNotification():
+	data = request.get_json()
+	print(data)
+	img = getMarkdownImage(data['fields']['contentText']['en-US'])
+	notification = makeNotification('4-H Fair: New post', data['fields']['title']['en-US'], {
+		'image': img,
+	})
+	sendNotification(notification)
+	print(notification)
+	return success_json()
+
 if __name__ == '__main__':
-	app.run(debug=True)
+	app.run(host='0.0.0.0', port=5000, debug=True)
