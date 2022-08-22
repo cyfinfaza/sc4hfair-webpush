@@ -1,0 +1,7 @@
+flask
+flask-cors
+pymongo
+dnspython
+python-dotenv
+py-vapid
+pywebpush
