@@ -64,7 +64,7 @@ def makeNotification(title: str, body: str, options = {}):
 	return notification
 
 def sendNotification(notification):
-	subscribers = subscribersCollection.find({})
+	subscribers = subscribersCollection.find({"valid": {"$ne": False}})
 	executor = ThreadPoolExecutor(max_workers=75)
 	def worker(subscriber):
 		try:
@@ -78,7 +78,13 @@ def sendNotification(notification):
 				}
 			)
 		except Exception as e:
-			print(e.args)
+			print(subscriber['_id'], e.args)
+			"""
+			404 - Endpoint Not Found - The URL specified is invalid and should not be used again.
+			410 - Endpoint Not Valid - The URL specified is no longer valid and should no longer be used. A User has become permanently unavailable at this URL.
+			"""
+			if e.response is not None and (e.response.status_code == 404 or e.response.status_code == 410):
+				subscribersCollection.update_one({"_id": subscriber['_id']}, {"$set": {"valid": False}}) # mark invalid
 			subscribersCollection.update_one({"_id": subscriber['_id']}, {"$push": {"failed": notification['_id']}})
 	attempted = []
 	for subscriber in subscribers:
