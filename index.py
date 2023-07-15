@@ -1,6 +1,5 @@
 # fmt: off
-from datetime import datetime
-import time
+from datetime import datetime, timezone
 from flask import Flask, request, Response
 from flask_cors import CORS
 import pymongo
@@ -46,9 +45,12 @@ def sha256(s):
 	hash.update(s.encode('utf-8'))
 	return hash.hexdigest()
 
+def unixTimeMs(time: datetime):
+	return int(time.replace(tzinfo=timezone.utc).timestamp() * 1000)
+
 def makeNotification(title: str, body: str, options = {}):
 	notificationId = str(uuid4())
-	createdTime = datetime.utcnow()
+	createdTime = datetime.utcnow() # will become a time in db
 	notification = {
 		'_id': notificationId,
 		'createdTime': createdTime,
@@ -62,21 +64,27 @@ def makeNotification(title: str, body: str, options = {}):
 	return notification
 
 def sendNotification(notification):
-	subscribers = subscribersCollection.find({})
+	subscribers = subscribersCollection.find({"valid": {"$ne": False}})
 	executor = ThreadPoolExecutor(max_workers=75)
 	def worker(subscriber):
 		try:
 			print("Sending notification to {}".format(subscriber['_id']))
 			webpush(
 				subscription_info=subscriber['subscription_info'],
-				data=json.dumps({"type": "notification", "id":notification['_id'], "time":time.mktime(notification['createdTime'].timetuple()), "data": notification['data']}),
+				data=json.dumps({"type": "notification", "id": notification['_id'], "time": unixTimeMs(notification['createdTime']), "data": notification['data']}),
 				vapid_private_key=WEBPUSH_PRIVATE_KEY,
 				vapid_claims={
 					'sub': 'mailto:vapid_claims@4hcomputers.club',
 				}
 			)
 		except Exception as e:
-			print(e.args)
+			print(subscriber['_id'], e.args)
+			"""
+			404 - Endpoint Not Found - The URL specified is invalid and should not be used again.
+			410 - Endpoint Not Valid - The URL specified is no longer valid and should no longer be used. A User has become permanently unavailable at this URL.
+			"""
+			if e.response is not None and (e.response.status_code == 404 or e.response.status_code == 410):
+				subscribersCollection.update_one({"_id": subscriber['_id']}, {"$set": {"valid": False}}) # mark invalid
 			subscribersCollection.update_one({"_id": subscriber['_id']}, {"$push": {"failed": notification['_id']}})
 	attempted = []
 	for subscriber in subscribers:
@@ -106,20 +114,23 @@ def genericNotification():
 	data = request.get_json()
 	notification = makeNotification(data['title'], data['body'])
 	sendNotification(notification)
-	return success_json()
+	return success_json(data=notification['data'])
 
 @app.route('/hooks/notification/contentful', methods=['POST'])
 @require_api_key
 def contentfulNotification():
 	data = request.get_json()
 	print(data)
+	if data['sys']['revision'] != 1:
+		return error_json('not the first revision')
 	img = getMarkdownImage(data['fields']['contentText']['en-US'])
 	notification = makeNotification('4-H Fair: New post', data['fields']['title']['en-US'], {
 		'image': img,
+		'timestamp': unixTimeMs(datetime.fromisoformat(data['sys']['updatedAt'][:-1])),
 	})
 	sendNotification(notification)
 	print(notification)
-	return success_json()
+	return success_json(data=notification['data'])
 
 if __name__ == '__main__':
 	app.run(host='0.0.0.0', port=5000, debug=True)
