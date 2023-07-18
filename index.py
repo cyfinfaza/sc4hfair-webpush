@@ -1,8 +1,10 @@
 # fmt: off
 from datetime import datetime, timezone
+from time import mktime
 from flask import Flask, request, Response
 from flask_cors import CORS
 import pymongo
+from bson import ObjectId
 import dotenv
 from os import environ
 from pywebpush import webpush, WebPushException
@@ -63,32 +65,33 @@ def makeNotification(title: str, body: str, options = {}):
 	notificationsCollection.insert_one(notification)
 	return notification
 
+def sendOneNotification(subscriber, notification):
+	try:
+		print("Sending notification to {}".format(subscriber['_id']))
+		webpush(
+			subscription_info=subscriber['subscription_info'],
+			data=json.dumps({"type": "notification", "id": notification['_id'], "time": unixTimeMs(notification['createdTime']), "data": notification['data']}),
+			vapid_private_key=WEBPUSH_PRIVATE_KEY,
+			vapid_claims={
+				'sub': 'mailto:vapid_claims@4hcomputers.club',
+			}
+		)
+	except Exception as e:
+		print(subscriber['_id'], e.args)
+		"""
+		404 - Endpoint Not Found - The URL specified is invalid and should not be used again.
+		410 - Endpoint Not Valid - The URL specified is no longer valid and should no longer be used. A User has become permanently unavailable at this URL.
+		"""
+		if e.response is not None and (e.response.status_code == 404 or e.response.status_code == 410):
+			subscribersCollection.update_one({"_id": subscriber['_id']}, {"$set": {"valid": False}}) # mark invalid
+		subscribersCollection.update_one({"_id": subscriber['_id']}, {"$push": {"failed": notification['_id']}})
+
 def sendNotification(notification):
 	subscribers = subscribersCollection.find({"valid": {"$ne": False}})
 	executor = ThreadPoolExecutor(max_workers=75)
-	def worker(subscriber):
-		try:
-			print("Sending notification to {}".format(subscriber['_id']))
-			webpush(
-				subscription_info=subscriber['subscription_info'],
-				data=json.dumps({"type": "notification", "id": notification['_id'], "time": unixTimeMs(notification['createdTime']), "data": notification['data']}),
-				vapid_private_key=WEBPUSH_PRIVATE_KEY,
-				vapid_claims={
-					'sub': 'mailto:vapid_claims@4hcomputers.club',
-				}
-			)
-		except Exception as e:
-			print(subscriber['_id'], e.args)
-			"""
-			404 - Endpoint Not Found - The URL specified is invalid and should not be used again.
-			410 - Endpoint Not Valid - The URL specified is no longer valid and should no longer be used. A User has become permanently unavailable at this URL.
-			"""
-			if e.response is not None and (e.response.status_code == 404 or e.response.status_code == 410):
-				subscribersCollection.update_one({"_id": subscriber['_id']}, {"$set": {"valid": False}}) # mark invalid
-			subscribersCollection.update_one({"_id": subscriber['_id']}, {"$push": {"failed": notification['_id']}})
 	attempted = []
 	for subscriber in subscribers:
-		executor.submit(worker, subscriber)
+		executor.submit(sendOneNotification, subscriber, notification)
 		# worker(subscriber)
 		attempted.append(subscriber['_id'])
 	notificationsCollection.update_one({"_id": notification['_id']}, {"$push": {"attempted": {"$each": attempted}}})
@@ -97,16 +100,33 @@ def require_api_key(f):
 	@wraps(f)
 	def wrapper(*args, **kwargs):
 		if 'api-key' not in request.headers:
-			return error_json('No API key provided')
+			return json_response(401, 'No API key provided', None)
 		apiKey = request.headers.get('api-key')
 		if (sha256(apiKey) != GENERIC_HOOK_KEY_HASH):
-			return error_json('Invalid API key')
+			return json_response(401, 'Invalid API key', None)
 		return f(*args, **kwargs)
 	return wrapper
 
 @app.route('/')
 def index():
 	return 'hi'
+
+@app.route('/admin/getAllSubscriptions')
+@require_api_key
+def getAllSubscriptions():
+	subscriptions = subscribersCollection.find({})
+	subscriptionsList = list(map(lambda s: {**s, "_id":str(s["_id"]), "created": mktime(s["created"].timetuple())}, subscriptions))
+	print(subscriptionsList)
+	return success_json(data={'subscriptions': subscriptionsList})
+
+@app.route('/admin/sendNotification', methods=['POST'])
+@require_api_key
+def sendNotificationAdmin():
+	data = request.get_json()
+	notification = makeNotification(data['title'], data['body'])
+	subscriber = subscribersCollection.find_one({"_id": ObjectId(data['subscriberId'])})
+	sendOneNotification(subscriber, notification)
+	return success_json()
 
 @app.route('/hooks/notification/generic', methods=['POST'])
 @require_api_key
