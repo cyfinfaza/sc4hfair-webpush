@@ -1,8 +1,7 @@
-flask
-flask-cors
-pymongo
-dnspython
-python-dotenv
-py-vapid
-pywebpush
-markdown
+Flask==3.0.2
+Flask-Cors==4.0.0
+pymongo==4.6.3
+python-dotenv==1.0.1
+py-vapid==1.9.0
+pywebpush==2.0.0
+Markdown==3.6

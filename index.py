@@ -7,7 +7,7 @@ import pymongo
 from bson import ObjectId
 import dotenv
 from os import environ
-from pywebpush import webpush, WebPushException
+from pywebpush import webpush
 import json
 from uuid import uuid4
 from concurrent.futures import ThreadPoolExecutor
@@ -72,9 +72,9 @@ def sendOneNotification(subscriber, notification):
 			subscription_info=subscriber['subscription_info'],
 			data=json.dumps({"type": "notification", "id": notification['_id'], "time": unixTimeMs(notification['createdTime']), "data": notification['data']}),
 			vapid_private_key=WEBPUSH_PRIVATE_KEY,
-			vapid_claims={
-				'sub': 'mailto:vapid_claims@4hcomputers.club',
-			}
+			vapid_claims={'sub': 'mailto:vapid_claims@4hcomputers.club'},
+			# fix for windows (https://learn.microsoft.com/en-us/windows/apps/design/shell/tiles-and-notifications/push-request-response-headers)
+			headers={'X-WNS-Type': 'wns/raw', 'X-WNS-Cache-Policy': 'no-cache'}
 		)
 	except Exception as e:
 		print(subscriber['_id'], e.args)
@@ -82,6 +82,10 @@ def sendOneNotification(subscriber, notification):
 		404 - Endpoint Not Found - The URL specified is invalid and should not be used again.
 		410 - Endpoint Not Valid - The URL specified is no longer valid and should no longer be used. A User has become permanently unavailable at this URL.
 		"""
+		if e.response is not None:
+			print('WebPushException', e.args)
+			print(e.response.text)
+			print(e.response.headers)
 		if e.response is not None and (e.response.status_code == 404 or e.response.status_code == 410):
 			subscribersCollection.update_one({"_id": subscriber['_id']}, {"$set": {"valid": False}}) # mark invalid
 		subscribersCollection.update_one({"_id": subscriber['_id']}, {"$push": {"failed": notification['_id']}})
