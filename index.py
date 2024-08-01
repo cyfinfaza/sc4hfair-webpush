@@ -147,8 +147,11 @@ def contentfulNotification():
 	print(data)
 	if data['sys']['revision'] != 1:
 		return error_json('not the first revision')
+	postType = data['fields']['type']['en-US']
+	if postType == 'silent':
+		return error_json('silent post, not sending notification')
 	img = getMarkdownImage(data['fields']['contentText']['en-US'])
-	notification = makeNotification('4-H Fair: New post', data['fields']['title']['en-US'], {
+	notification = makeNotification(f'4-H Fair: {"Emergency Alert" if postType == "emergency" else "New post"}', data['fields']['title']['en-US'], {
 		'image': img,
 		'timestamp': unixTimeMs(datetime.fromisoformat(data['sys']['updatedAt'][:-1])),
 	})
