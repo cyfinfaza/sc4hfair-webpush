@@ -5,3 +5,4 @@ python-dotenv==1.0.1
 py-vapid==1.9.0
 pywebpush==2.0.0
 Markdown==3.6
+motor==3.5.1
