@@ -1,5 +1,5 @@
 # fmt: off
-from datetime import datetime, timezone
+from datetime import datetime
 from time import mktime
 from flask import Flask, request, Response
 from flask_cors import CORS
@@ -14,6 +14,7 @@ from concurrent.futures import ThreadPoolExecutor
 import hashlib
 from functools import wraps
 from lib.markdown_image_extractor import getMarkdownImage
+from common import unixTimeMs
 
 app = Flask(__name__)
 app.url_map.strict_slashes = False
@@ -46,9 +47,6 @@ def sha256(s):
 	hash = hashlib.sha256()
 	hash.update(s.encode('utf-8'))
 	return hash.hexdigest()
-
-def unixTimeMs(time: datetime):
-	return int(time.replace(tzinfo=timezone.utc).timestamp() * 1000)
 
 def makeNotification(title: str, body: str, options = {}):
 	notificationId = str(uuid4())
