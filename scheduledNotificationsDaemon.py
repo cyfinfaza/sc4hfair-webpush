@@ -114,7 +114,7 @@ async def process_notifications(queue: asyncio.Queue, session: aiohttp.ClientSes
 		success = False
 		try:
 			# Fetch the subscriber based on the target in scheduledNotification
-			subscriber = await subscriptionsCollection.find_one({'_id': scheduledNotification['target'], 'valid': {'$ne': False}})
+			subscriber = await subscriptionsCollection.find_one({'_id': scheduledNotification['target'], 'valid': {'$ne': False}, 'registered': {'$ne': False}})
 
 			if subscriber:
 				async with session.get(
