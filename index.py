@@ -68,7 +68,12 @@ def sendOneNotification(subscriber, notification):
 		print("Sending notification to {}".format(subscriber['_id']))
 		webpush(
 			subscription_info=subscriber['subscription_info'],
-			data=json.dumps({"type": "notification", "id": notification['_id'], "time": unixTimeMs(notification['createdTime']), "data": notification['data']}),
+			data=json.dumps({
+				"type": "notification",
+				"id": notification['_id'],
+				"time": unixTimeMs(notification['createdTime']),
+				"data": notification['data'],
+			}),
 			vapid_private_key=WEBPUSH_PRIVATE_KEY,
 			vapid_claims={'sub': 'mailto:vapid_claims@4hcomputers.club'},
 			# fix for windows (https://learn.microsoft.com/en-us/windows/apps/design/shell/tiles-and-notifications/push-request-response-headers)
@@ -149,10 +154,19 @@ def contentfulNotification():
 	if postType == 'silent':
 		return error_json('silent post, not sending notification')
 	img = getMarkdownImage(data['fields']['contentText']['en-US'])
-	notification = makeNotification(f'4-H Fair: {"Emergency Alert" if postType == "emergency" else "New post"}', data['fields']['title']['en-US'], {
-		'image': img,
-		'timestamp': unixTimeMs(datetime.fromisoformat(data['sys']['updatedAt'][:-1])),
-	})
+	notification = makeNotification(
+		f'4-H Fair: {"Emergency Alert" if postType == "emergency" else "New post"}',
+		data['fields']['title']['en-US'], {
+			'image': img,
+			'timestamp': unixTimeMs(datetime.fromisoformat(data['sys']['updatedAt'][:-1])),
+			'actions': [
+				{
+					'action': f'/#{data["sys"]["id"]}',
+					'title': f'View Full {"Alert" if postType == "emergency" else "Post"}'
+				}
+			]
+		}
+	)
 	sendNotification(notification)
 	print(notification)
 	return success_json(data=notification['data'])

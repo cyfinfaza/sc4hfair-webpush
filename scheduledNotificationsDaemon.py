@@ -42,16 +42,16 @@ async def sendOneNotification(subscriber, scheduledNotification, eventData):
 				'title': f'Upcoming 4-H event: {eventData["title"]}',
 				'body': f'Starting at {eventTime}' + tentInfo,
 				'options': {
-				'timestamp': unixTimeMs(notifTime),
-					'actions': [
-						{
-							'action': f'/schedule#{scheduledNotification["eventId"]}',
-							'title': 'More Details'
-						}
-					],
+					'timestamp': unixTimeMs(notifTime),
+						'actions': [
+							{
+								'action': f'/schedule#{scheduledNotification["eventId"]}',
+								'title': 'More Details'
+							}
+						],
+					}
 				}
 			}
-		}
 		if tentSlug:
 			notification_data['data']['options']['actions'].append({
 				'action': f'/map?locate={tentSlug}',
