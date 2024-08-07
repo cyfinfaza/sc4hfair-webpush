@@ -85,11 +85,15 @@ def sendOneNotification(subscriber, notification):
 			print(e.response.text)
 			print(e.response.headers)
 		if e.response is not None and (e.response.status_code == 404 or e.response.status_code == 410):
-			subscribersCollection.update_one({"_id": subscriber['_id']}, {"$set": {"valid": False}}) # mark invalid
+			subscribersCollection.update_one({"_id": subscriber['_id']}, {"$set": {
+				"valid": False,
+				"invalidReason": [e.args, e.response.status_code, e.response.text, e.response.headers]
+			}}) # mark invalid
 		subscribersCollection.update_one({"_id": subscriber['_id']}, {"$push": {"failed": notification['_id']}})
+		notificationsCollection.update_one({"_id": notification['_id']}, {"$push": {"failed": subscriber['_id']}})
 
 def sendNotification(notification):
-	subscribers = subscribersCollection.find({"valid": {"$ne": False}})
+	subscribers = subscribersCollection.find({"valid": {"$ne": False}, "registered": True})
 	executor = ThreadPoolExecutor(max_workers=75)
 	attempted = []
 	for subscriber in subscribers:
@@ -116,7 +120,7 @@ def index():
 @app.route('/admin/getAllSubscriptions')
 @require_api_key
 def getAllSubscriptions():
-	subscriptions = subscribersCollection.find({})
+	subscriptions = subscribersCollection.find({"registered": True})
 	subscriptionsList = list(map(lambda s: {**s, "_id":str(s["_id"]), "created": mktime(s["created"].timetuple())}, subscriptions))
 	print(subscriptionsList)
 	return success_json(data={'subscriptions': subscriptionsList})
