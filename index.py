@@ -15,6 +15,7 @@ import hashlib
 from functools import wraps
 from lib.markdown_image_extractor import getMarkdownImage
 from common import unixTimeMs
+from dateutil.parser import isoparse
 
 app = Flask(__name__)
 app.url_map.strict_slashes = False
@@ -162,7 +163,7 @@ def contentfulNotification():
 		f'4-H Fair: {"Emergency Alert" if postType == "emergency" else "New post"}',
 		data['fields']['title']['en-US'], {
 			'image': img,
-			'timestamp': unixTimeMs(datetime.fromisoformat(data['sys']['updatedAt'][:-1])),
+			'timestamp': unixTimeMs(isoparse(data['sys']['updatedAt'])),
 			'actions': [
 				{
 					'action': f'/#{data["sys"]["id"]}',

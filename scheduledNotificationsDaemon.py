@@ -7,6 +7,8 @@ import json
 from pywebpush import webpush
 from common import unixTimeMs
 import aiohttp
+from dateutil.parser import isoparse
+from dateutil.tz import UTC
 
 load_dotenv()
 MONGODB_SECRET = environ.get('MONGODB_SECRET')
@@ -33,7 +35,7 @@ async def sendOneNotification(subscriber, scheduledNotification, eventData):
 			tentInfo = f' {"near" if eventData.get("near") else "in"} {tentName}'
 
 		notifTime = scheduledNotification['when']
-		eventTime = datetime.fromisoformat(eventData['time']).strftime('%I:%M %p')
+		eventTime = isoparse(eventData['time']).strftime('%I:%M %p')
 
 		notification_data = {
 			'type': 'notification',
@@ -68,7 +70,7 @@ async def sendOneNotification(subscriber, scheduledNotification, eventData):
 
 		await scheduledNotificationsCollection.update_one(
 			{'_id': scheduledNotification['_id']},
-			{'$set': {'sent': True, 'sentTime': datetime.utcnow()}}
+			{'$set': {'sent': True, 'sentTime': datetime.now(tz=UTC)}}
 		)
 
 		print(f'successfully sent notification {scheduledNotification["_id"]} to {subscriber["_id"]}')
@@ -85,7 +87,10 @@ async def sendOneNotification(subscriber, scheduledNotification, eventData):
 			if e.response.status_code in [404, 410]:
 				await subscriptionsCollection.update_one(
 					{'_id': subscriber['_id']},
-					{'$set': {'valid': False}}
+					{'$set': {
+						'valid': False,
+						'invalidReason': [e.args, e.response.status_code, e.response.text, e.response.headers]
+					}}
 				)
 
 		await subscriptionsCollection.update_one(
@@ -94,7 +99,7 @@ async def sendOneNotification(subscriber, scheduledNotification, eventData):
 		)
 		await scheduledNotificationsCollection.update_one(
 			{'_id': scheduledNotification['_id']},
-			{'$set': {'sent': False, 'sentTime': datetime.utcnow()}}
+			{'$set': {'sent': False, 'sentTime': datetime.now(tz=UTC)}}
 		)
 
 graphqlQuery = '''{
@@ -140,7 +145,7 @@ async def process_notifications(queue: asyncio.Queue, session: aiohttp.ClientSes
 			if success == False:
 				await scheduledNotificationsCollection.update_one(
 					{'_id': scheduledNotification['_id']},
-					{'$set': {'sent': False, 'sentTime': datetime.utcnow()}}
+					{'$set': {'sent': False, 'sentTime': datetime.now(tz=UTC)}}
 				)
 
 		except Exception as e:
@@ -149,7 +154,7 @@ async def process_notifications(queue: asyncio.Queue, session: aiohttp.ClientSes
 			queue.task_done()
 
 async def check_and_queue_notifications(queue: asyncio.Queue):
-	current_time = datetime.utcnow()
+	current_time = datetime.now(tz=UTC)
 
 	cursor = scheduledNotificationsCollection.find({
 		'when': {'$lte': current_time},
