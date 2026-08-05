@@ -37,7 +37,7 @@ def json_response(status, message=None, data=None):
 	elif 400 <= status <= 599: d['type'] = 'error'
 	if data: d.update(data)
 	if message: d['message'] = message
-	return Response(json.dumps(d), status=status, mimetype='application/json')
+	return Response(json.dumps(d, default=str), status=status, mimetype='application/json')
 
 def success_json(message=None, data=None):
 	return json_response(200, message, data)
