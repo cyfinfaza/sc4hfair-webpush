@@ -1,0 +1,13 @@
+[Unit]
+Description=sc4hfair webpush events (scheduledNotificationsDaemon.py)
+After=network.target
+
+[Service]
+WorkingDirectory=/root/sc4hfair-webpush
+ExecStart=/root/sc4hfair-webpush/venv/bin/python3 scheduledNotificationsDaemon.py
+Restart=always
+RestartSec=5
+KillSignal=SIGTERM
+
+[Install]
+WantedBy=multi-user.target

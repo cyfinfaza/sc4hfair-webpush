@@ -1,0 +1,13 @@
+[Unit]
+Description=sc4hfair webpush (uwsgi)
+After=network.target
+
+[Service]
+WorkingDirectory=/root/sc4hfair-webpush
+ExecStart=/root/sc4hfair-webpush/venv/bin/uwsgi --http 127.0.0.1:5000 --module index:app --master --processes 2 --threads 4 --die-on-term --vacuum --lazy-apps
+Restart=always
+RestartSec=5
+KillSignal=SIGTERM
+
+[Install]
+WantedBy=multi-user.target
